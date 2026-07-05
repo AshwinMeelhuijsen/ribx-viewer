@@ -1,6 +1,6 @@
 # AM RibX Viewer
 
-Professionele webapplicatie voor het uitlezen, analyseren en presenteren van RIBX/RIPX-bestanden voor rioolinspecties.
+Professionele webapplicatie voor het uitlezen, analyseren en presenteren van RIBX-bestanden voor rioolinspecties.
 
 ## Projectinformatie
 
