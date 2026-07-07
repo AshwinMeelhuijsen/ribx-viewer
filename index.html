@@ -1,291 +1,540 @@
-<!doctype html>
-<html lang="nl">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>AM RibX Viewer | AM Rioolinspecties</title>
-    <meta name="description" content="Online AM RibX Viewer voor RIBX/RIPX rioolinspecties, reiniging en uitvoering.">
-    <meta name="theme-color" content="#0c766c">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="AM RibX Viewer">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="css/map-viewer.css?v=20260707j">
-  </head>
-  <body>
-    <div id="app">
-      <aside id="sidebar">
-        <header class="brand">
-          <img class="brand-logo" src="assets/icons/icon-180.png" alt="AM RibX Viewer logo">
-          <div>
-            <p>AM Rioolinspecties</p>
-            <h1>AM RibX Viewer</h1>
-          </div>
-        </header>
+:root {
+  color-scheme: light;
+  --bg: #f5f7f8;
+  --surface: #ffffff;
+  --surface-strong: #eef4f3;
+  --text: #172322;
+  --muted: #66736f;
+  --line: #dbe4e2;
+  --primary: #0c766c;
+  --primary-strong: #075e56;
+  --blue: #1769aa;
+  --done: #22a06b;
+  --problem: #d93025;
+  --selected: #f59e0b;
+  --shadow: 0 8px 24px rgba(23, 35, 34, 0.1);
+  font-family: Arial, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
 
-        <section class="panel">
-          <label for="fileInput">RIBX/RIPX bestand openen</label>
-          <input id="fileInput" type="file">
-          <p class="muted">Het bestand wordt lokaal in de browser gelezen. Er wordt niets naar een server geupload.</p>
-          <div id="message" class="message muted"></div>
-        </section>
+* {
+  box-sizing: border-box;
+}
 
-        <section class="panel">
-          <strong>JSON-backup opslaan / laden</strong>
-          <button id="saveProgressBtn" class="button-secondary" type="button">Download JSON-backup</button>
-          <label for="progressInput">JSON-backup opnieuw inladen</label>
-          <input id="progressInput" type="file">
-          <button id="clearAllProgressBtn" class="button-secondary" type="button">Alle statussen wissen</button>
-          <p class="muted">Alleen voor tussentijds bewaren. Dit is geen RIBX-export.</p>
-        </section>
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
 
-        <section class="panel">
-          <strong>RIBX velden invullen</strong>
-          <p class="muted">Vul statusvelden voor leidingen en putten in en download daarna een bijgewerkt RIBX-bestand.</p>
-          <button id="downloadRibxBtn" type="button">Download bijgewerkt .ribx bestand</button>
+body {
+  color: var(--text);
+  background: var(--bg);
+}
 
-          <div class="edit-block">
-            <b>Geselecteerde leiding</b>
-            <div id="pipeEditHint" class="muted small-text">Klik eerst op een leiding op de kaart.</div>
+#app {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  height: 100%;
+}
 
-            <label for="pipeInspectionStatus">Inspectie leiding</label>
-            <select id="pipeInspectionStatus">
-              <option value="">Niet wijzigen</option>
-              <option value="inspected">Geinspecteerd</option>
-              <option value="not-inspected">Niet geinspecteerd / niet behandeld</option>
-            </select>
+#sidebar {
+  overflow-y: auto;
+  padding: 16px;
+  background: #f7f9fa;
+  border-right: 1px solid var(--line);
+}
 
-            <label for="pipeInspectionReason">Reden niet geinspecteerd (AXD)</label>
-            <select id="pipeInspectionReason">
-              <option value="">Geen reden</option>
-              <option value="A">Voertuig/obstakel op toegang</option>
-              <option value="B">Straat niet toegankelijk voor voertuig</option>
-              <option value="C">Groen blokkeert de toegang</option>
-              <option value="D">Niet aangetroffen</option>
-              <option value="E">Deksel vast</option>
-              <option value="Z">Anders</option>
-            </select>
+#map {
+  position: relative;
+  min-height: 100%;
+}
 
-            <label for="pipeCleaningStatus">Reiniging leiding</label>
-            <select id="pipeCleaningStatus">
-              <option value="">Niet wijzigen</option>
-              <option value="cleaned">Gereinigd</option>
-              <option value="not-cleaned">Niet gereinigd</option>
-            </select>
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
-            <label for="pipeCleaningReason">Reden reiniging (GBP)</label>
-            <select id="pipeCleaningReason">
-              <option value="">Geen reden</option>
-              <option value="A">Reguliere reiniging</option>
-              <option value="B">Verstopte leiding</option>
-              <option value="C">Bijkomende zorg naast verstopte streng</option>
-              <option value="D">T.b.v. inspectie</option>
-              <option value="E">Nazorg daags na reiniging</option>
-              <option value="F">Voorreiniging</option>
-              <option value="Z">Andere reden</option>
-            </select>
+.brand-logo {
+  display: block;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(23, 35, 34, 0.18);
+}
 
-            <label for="pipeCleaningMethod">Methode van reiniging (GBE)</label>
-            <select id="pipeCleaningMethod">
-              <option value="">Geen methode</option>
-              <option value="A">Hogedrukreiniging</option>
-              <option value="B">Spoelen met water</option>
-              <option value="C">Schuimprop</option>
-              <option value="D">IJsslurry</option>
-              <option value="E">Schrapen</option>
-              <option value="F">Doortrekken dik touw</option>
-              <option value="G">Handmatig</option>
-              <option value="Z">Andere methode</option>
-            </select>
+.brand p {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
 
-            <label for="pipeCleaningDate">Reinigingsdatum (GBF)</label>
-            <input id="pipeCleaningDate" type="date">
+h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
 
-            <label for="pipeNotCleanedReason">Reden niet gereinigd (GXD)</label>
-            <select id="pipeNotCleanedReason">
-              <option value="">Geen reden</option>
-              <option value="A">Voertuig/obstakel op toegang</option>
-              <option value="B">Straat niet toegankelijk voor voertuig</option>
-              <option value="C">Groen blokkeert de toegang</option>
-              <option value="D">Niet aangetroffen</option>
-              <option value="E">Deksel vast</option>
-              <option value="Z">Anders</option>
-            </select>
+.panel {
+  margin: 12px 0;
+  padding: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(23, 35, 34, 0.05);
+}
 
-            <button id="applyPipeRibxBtn" type="button">Schrijf leidingvelden naar RIBX</button>
-          </div>
+label,
+.panel strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
 
-          <div class="edit-block">
-            <b>Put</b>
-            <label for="manholeSelect">Put kiezen</label>
-            <select id="manholeSelect">
-              <option value="">Nog geen putten geladen</option>
-            </select>
+label {
+  margin-top: 10px;
+}
 
-            <label for="putInspectionStatus">Inspectie put</label>
-            <select id="putInspectionStatus">
-              <option value="">Niet wijzigen</option>
-              <option value="inspected">Geinspecteerd</option>
-              <option value="not-inspected">Niet geinspecteerd / niet behandeld</option>
-            </select>
+input,
+select,
+button {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 7px;
+  padding: 8px 10px;
+  border: 1px solid #cdd8d6;
+  border-radius: 8px;
+  font: inherit;
+}
 
-            <label for="putInspectionReason">Reden niet geinspecteerd (CXD)</label>
-            <select id="putInspectionReason">
-              <option value="">Geen reden</option>
-              <option value="A">Voertuig/obstakel op toegang</option>
-              <option value="B">Straat niet toegankelijk voor voertuig</option>
-              <option value="C">Groen blokkeert de toegang</option>
-              <option value="D">Niet aangetroffen</option>
-              <option value="E">Deksel vast</option>
-              <option value="Z">Anders</option>
-            </select>
+button {
+  background: var(--primary);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  font-weight: 800;
+}
 
-            <label for="putCleaningStatus">Reiniging put</label>
-            <select id="putCleaningStatus">
-              <option value="">Niet wijzigen</option>
-              <option value="cleaned">Gereinigd</option>
-              <option value="not-cleaned">Niet gereinigd</option>
-            </select>
+button:hover {
+  filter: brightness(0.97);
+}
 
-            <label for="putCleaningReason">Doel reiniging put (JBP)</label>
-            <select id="putCleaningReason">
-              <option value="">Geen doel</option>
-              <option value="A">Reguliere reiniging</option>
-              <option value="B">Verstopte leiding</option>
-              <option value="C">Bijkomende zorg naast verstopte streng</option>
-              <option value="D">T.b.v. inspectie</option>
-              <option value="E">Nazorg daags na reiniging</option>
-              <option value="F">Voorreiniging</option>
-              <option value="Z">Andere reden</option>
-            </select>
+.button-secondary {
+  background: var(--surface-strong);
+  color: #203432;
+  border: 1px solid var(--line);
+}
 
-            <label for="putNotCleanedReason">Reden niet gereinigd (JXD)</label>
-            <select id="putNotCleanedReason">
-              <option value="">Geen reden</option>
-              <option value="A">Voertuig/obstakel op toegang</option>
-              <option value="B">Straat niet toegankelijk voor voertuig</option>
-              <option value="C">Groen blokkeert de toegang</option>
-              <option value="D">Niet aangetroffen</option>
-              <option value="E">Deksel vast</option>
-              <option value="Z">Anders</option>
-            </select>
+.button-danger {
+  background: var(--problem);
+}
 
-            <button id="applyPutRibxBtn" type="button">Schrijf putvelden naar RIBX</button>
-          </div>
+.muted {
+  color: var(--muted);
+}
 
-        </section>
+.ok {
+  color: #067647;
+}
 
-        <section class="panel stats" aria-label="Projectstatistieken">
-          <div class="stat"><strong id="pipeCount">0</strong><span>strengen</span></div>
-          <div class="stat"><strong id="manholeCount">0</strong><span>putten</span></div>
-          <div class="stat"><strong id="totalLength">0 m</strong><span>lengte</span></div>
-          <div class="stat"><strong id="streetCount">0</strong><span>straten</span></div>
-        </section>
+.error {
+  color: #b42318;
+}
 
-        <section class="panel">
-          <strong>Reinigingsvoortgang</strong>
-          <div class="progress-bar"><div id="cleanedProgressBar" class="progress-bar-fill"></div></div>
-          <div class="progress-grid">
-            <div><span class="muted">Gereinigd</span><b id="cleanedLength">0 m</b></div>
-            <div><span class="muted">Nog te reinigen</span><b id="remainingLength">0 m</b></div>
-            <div><span class="muted">Voortgang</span><b id="cleanedPercent">0%</b></div>
-          </div>
-        </section>
+.message,
+.panel p {
+  margin: 8px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
 
-        <section class="panel validation-panel">
-          <strong>RIBX validatie</strong>
-          <div id="validationSummary" class="validation-summary muted">Nog geen bestand geladen.</div>
-          <details id="validationDetails" class="validation-details">
-            <summary>Bekijk validatierapport</summary>
-            <div id="validationReport" class="validation-report muted">Nog geen rapport beschikbaar.</div>
-          </details>
-          <button id="downloadValidationBtn" class="button-secondary" type="button">Download validatierapport CSV</button>
-        </section>
+.small-text {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.edit-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.edit-block b {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  padding: 10px;
+  background: var(--surface-strong);
+  border-radius: 8px;
+}
+
+.stat strong,
+.stat span {
+  display: block;
+}
+
+.stat strong {
+  font-size: 1.25rem;
+}
+
+.stat span {
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+
+.legend {
+  display: grid;
+  gap: 9px;
+  margin-top: 11px;
+  font-size: 0.86rem;
+}
+
+.legend div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.line {
+  display: inline-block;
+  width: 30px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.line.done {
+  background: var(--done);
+}
+
+.line.problem {
+  background: var(--problem);
+}
+
+.line.selected {
+  background: var(--selected);
+}
+
+.details {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.details b {
+  display: inline-block;
+  min-width: 112px;
+}
+
+.street-list {
+  max-height: 190px;
+  overflow-y: auto;
+  margin-top: 10px;
+  font-size: 0.86rem;
+}
+
+.street-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #edf1f0;
+}
+
+.topbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 800;
+  display: flex;
+  gap: 8px;
+}
+
+.map-button {
+  width: auto;
+  margin-top: 0;
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 860px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 48vh) minmax(420px, 1fr);
+  }
+
+  #sidebar {
+    order: 2;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  #map {
+    order: 1;
+  }
+}
 
 
-        <section class="panel">
-          <label for="searchBox">Zoeken</label>
-          <input id="searchBox" type="search" placeholder="Straat, putnummer of strengcode">
-          <label for="streetFilter">Straat filter</label>
-          <select id="streetFilter">
-            <option value="">Alle straten</option>
-          </select>
+/* AM RibX Viewer 2.0: riooltype, lengte en filters */
+.line.sewer-foul { background: #d93025; }
+.line.sewer-storm { background: #1769aa; }
+.line.sewer-combined { background: #7c3aed; }
+.line.sewer-drainage { background: #0c766c; }
+.line.sewer-unknown { background: #6b7280; }
 
-          <label for="typeFilter">Riooltype filter</label>
-          <select id="typeFilter">
-            <option value="">Alle riooltypes</option>
-            <option value="vuil">Vuilwater</option>
-            <option value="hemel">Hemelwater</option>
-            <option value="gemengd">Gemengd</option>
-            <option value="drainage">Drainage</option>
-            <option value="onbekend">Onbekend / overig</option>
-          </select>
+.type-badge,
+.status-badge {
+  display: inline-block;
+  min-width: auto !important;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
 
-          <label for="statusFilter">Status filter</label>
-          <select id="statusFilter">
-            <option value="">Alle statussen</option>
-            <option value="todo">Nog te reinigen</option>
-            <option value="done">Gereinigd</option>
-            <option value="problem">Aandachtspunt</option>
-          </select>
+.type-vuil { background: #d93025; }
+.type-hemel { background: #1769aa; }
+.type-gemengd { background: #7c3aed; }
+.type-drainage { background: #0c766c; }
+.type-onbekend { background: #6b7280; }
 
-          <label for="diameterFilter">Diameter filter</label>
-          <select id="diameterFilter">
-            <option value="">Alle diameters</option>
-          </select>
+.status-todo { background: #6b7280; }
+.status-done { background: #22a06b; }
+.status-problem { background: #d93025; }
 
-          <label for="materialFilter">Materiaal filter</label>
-          <select id="materialFilter">
-            <option value="">Alle materialen</option>
-          </select>
+.length-highlight {
+  display: inline-block;
+  min-width: auto !important;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--surface-strong);
+  font-weight: 900;
+}
 
-          <button id="fitBtn" class="button-secondary" type="button">Zoom naar volledig project</button>
-        </section>
+.summary-title {
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
 
-        <section class="panel">
-          <strong>Legenda</strong>
-          <div class="legend">
-            <div><span class="line sewer-foul"></span>Vuilwater</div>
-            <div><span class="line sewer-storm"></span>Hemelwater</div>
-            <div><span class="line sewer-combined"></span>Gemengd riool</div>
-            <div><span class="line sewer-drainage"></span>Drainage</div>
-            <div><span class="line sewer-unknown"></span>Onbekend / overig</div>
-            <div><span class="line done"></span>Gereinigd: dikkere lijn</div>
-            <div><span class="line problem"></span>Aandachtspunt: stippellijn</div>
-            <div><span class="line selected"></span>Geselecteerde streng</div>
-          </div>
-        </section>
+.leaflet-tooltip b {
+  font-weight: 900;
+}
 
-        <section class="panel">
-          <strong>Geselecteerde streng</strong>
-          <div id="details" class="details muted">Klik op een streng op de kaart.</div>
-          <button id="doneBtn" type="button">Markeer als gereinigd</button>
-          <button id="problemBtn" class="button-danger" type="button">Markeer als aandachtspunt</button>
-          <button id="clearStatusBtn" class="button-secondary" type="button">Status wissen</button>
-        </section>
+/* AM RibX Viewer 2.1: werkkaart */
+.progress-bar{width:100%;height:13px;margin-top:10px;overflow:hidden;background:var(--surface-strong);border:1px solid var(--line);border-radius:999px}
+.progress-bar-fill{width:0%;height:100%;background:var(--done);border-radius:999px;transition:width 160ms ease-out}
+.progress-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:9px;font-size:.82rem}
+.progress-grid div{padding:7px;background:var(--surface-strong);border-radius:8px}
+.progress-grid span,.progress-grid b{display:block}
+.manhole-marker{width:18px;height:18px;background:#fff;border:3px solid #172322;border-radius:50%;box-shadow:0 2px 6px rgba(23,35,34,.28)}
+.manhole-marker.selected{border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.28),0 2px 6px rgba(23,35,34,.28)}
+.manhole-label{color:#172322;font-size:11px;font-weight:900;line-height:1;text-align:center;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 2px 4px rgba(255,255,255,.75);pointer-events:none}
+.direction-arrow{color:#172322;font-size:18px;font-weight:900;line-height:1;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 2px 4px rgba(255,255,255,.8);pointer-events:none}
+.leaflet-interactive{-webkit-tap-highlight-color:transparent}
 
-        <section class="panel">
-          <strong>Straten in project</strong>
-          <div id="streetList" class="street-list muted">Nog geen bestand geladen.</div>
-        </section>
-      </aside>
+/* AM RibX Viewer 2.2: kaartlagen en gestreepte gereinigde strengen */
+.map-layer-button {
+  min-width: 44px;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 1.05rem;
+}
 
-      <main id="map" aria-label="Kaart">
-        <div class="topbar">
-          <button id="osmLayerBtn" class="map-button map-layer-button active" type="button" title="OpenStreetMap">🗺️</button>
-          <button id="satLayerBtn" class="map-button map-layer-button" type="button" title="Satelliet">🛰️</button>
-          <button id="pdokLayerBtn" class="map-button map-layer-button" type="button" title="PDOK luchtfoto">🇳🇱</button>
-          <button id="locateBtn" class="map-button" type="button" title="Toon mijn locatie">Mijn locatie</button>
-          <button id="shareBtn" class="map-button" type="button" title="Kopieer link">Kopieer link</button>
-        </div>
-      </main>
-    </div>
+.map-layer-button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
-    <script src="js/map-viewer.js?v=20260707j"></script>
-  </body>
-</html>
+.direction-arrow {
+  color: #111827;
+  -webkit-text-stroke: 1px #ffffff;
+}
+
+/* AM RibX Viewer 2.3: verbeterde pijlen en labels */
+.direction-arrow {
+  font-size: 14px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.manhole-label {
+  transform: translate(10px, -3px);
+}
+
+/* AM RibX Viewer 2.4: duidelijke gereinigde lijnen en SVG-pijlen */
+.direction-arrow {
+  width: 22px;
+  height: 22px;
+}
+
+.direction-arrow svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
+}
+
+.direction-arrow path {
+  stroke: #ffffff;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
+
+/* AM RibX Viewer QA/QC */
+.validation-panel button {
+  margin-top: 10px;
+}
+
+.validation-summary {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.validation-summary.ok {
+  color: #067647;
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+}
+
+.validation-summary.warning {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.validation-summary.error {
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+}
+
+.validation-details {
+  margin-top: 9px;
+  font-size: 0.84rem;
+}
+
+.validation-details summary {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.validation-report {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  line-height: 1.45;
+}
+
+.validation-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1f0;
+}
+
+.validation-item:last-child {
+  border-bottom: 0;
+}
+
+.validation-item b {
+  display: inline;
+  min-width: auto;
+}
+
+.validation-tag {
+  display: inline-block;
+  min-width: auto !important;
+  padding: 2px 6px;
+  margin-right: 5px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.validation-tag.error { background: #d93025; color: #fff; }
+.validation-tag.warning { background: #f59e0b; color: #172322; }
+.validation-tag.info { background: #1769aa; color: #fff; }
+
+
+/* AM RibX Viewer 2.5: uitgebreide RIBX-validatie */
+.validation-summary {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.validation-summary.ok { color:#067647; background:#ecfdf3; border:1px solid #abefc6; }
+.validation-summary.warn { color:#93370d; background:#fffaeb; border:1px solid #fedf89; }
+.validation-summary.error { color:#b42318; background:#fef3f2; border:1px solid #fecdca; }
+.validation-details { margin-top: 8px; font-size: 0.84rem; }
+.validation-details summary { cursor: pointer; font-weight: 800; color: var(--primary); }
+.validation-report {
+  margin-top: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+  line-height: 1.45;
+}
+.validation-item { padding: 8px 0; border-bottom: 1px solid #edf1f0; }
+.validation-item:last-child { border-bottom: 0; }
+.validation-item b { display: block; }
+.validation-pill {
+  display:inline-block;
+  min-width:auto!important;
+  margin-right:5px;
+  padding:2px 6px;
+  border-radius:999px;
+  color:#fff;
+  font-size:.72rem;
+  font-weight:900;
+}
+.validation-pill.error { background:#d93025; }
+.validation-pill.warn { background:#f59e0b; }
+.validation-pill.ok { background:#22a06b; }
+
+
+/* AM RibX Viewer stability update: kaartdiagnose en parallelle strengen */
+.diagnostic-line {
+  margin-top: 6px;
+}
+.validation-small {
+  color: var(--muted);
+  font-size: .78rem;
+}

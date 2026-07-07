@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">AM RibX Viewer</title>
+  <defs>
+    <linearGradient id="bg" x1="70" y1="34" x2="442" y2="478" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f877d"/>
+      <stop offset="1" stop-color="#075e56"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <path d="M60 138h392M60 250h392M60 362h392M140 58v396M258 58v396M374 58v396" stroke="#d9ece8" stroke-width="10" opacity=".18"/>
+  <path d="M82 352c64-74 137-86 219-33 55 36 99 35 134-4" fill="none" stroke="#f6a04d" stroke-width="34" stroke-linecap="round"/>
+  <path d="M82 352c64-74 137-86 219-33 55 36 99 35 134-4" fill="none" stroke="#ffd099" stroke-width="10" stroke-linecap="round" opacity=".9"/>
+  <circle cx="92" cy="350" r="27" fill="#fff"/>
+  <circle cx="92" cy="350" r="13" fill="#0c766c"/>
+  <circle cx="436" cy="315" r="27" fill="#fff"/>
+  <circle cx="436" cy="315" r="13" fill="#0c766c"/>
+  <circle cx="330" cy="218" r="48" fill="#102220" opacity=".28"/>
+  <circle cx="330" cy="218" r="34" fill="#ffffff"/>
+  <circle cx="330" cy="218" r="18" fill="#123532"/>
+  <circle cx="322" cy="210" r="7" fill="#7fe0d0"/>
+  <text x="170" y="206" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="800" fill="#ffffff">AM</text>
+  <text x="256" y="434" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="800" fill="#ffffff">RibX</text>
+</svg>
