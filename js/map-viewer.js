@@ -13,10 +13,38 @@
   );
 
   const map = L.map("map").setView([52.67, 4.82], 15);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 21,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+
+  const baseLayers = {
+    osm: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 21,
+      attribution: "&copy; OpenStreetMap contributors",
+    }),
+    satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 21,
+      attribution: "Tiles &copy; Esri",
+    }),
+    pdok: L.tileLayer("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_ortho25/EPSG:3857/{z}/{y}/{x}.jpeg", {
+      maxZoom: 21,
+      attribution: "Luchtfoto &copy; PDOK",
+    }),
+  };
+
+  let currentBaseLayer = null;
+
+  function setBaseLayer(name) {
+    const layerName = baseLayers[name] ? name : "osm";
+    if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+    currentBaseLayer = baseLayers[layerName];
+    currentBaseLayer.addTo(map);
+    localStorage.setItem("amRibxBaseLayer", layerName);
+
+    ["osm", "sat", "pdok"].forEach((key) => {
+      const btn = document.getElementById(`${key}LayerBtn`);
+      if (btn) btn.classList.toggle("active", (key === "sat" ? "satellite" : key) === layerName);
+    });
+  }
+
+  setBaseLayer(localStorage.getItem("amRibxBaseLayer") || "osm");
 
   let pipes = [];
   let layers = [];
@@ -61,6 +89,9 @@
     clearAllProgressBtn: document.getElementById("clearAllProgressBtn"),
     locateBtn: document.getElementById("locateBtn"),
     shareBtn: document.getElementById("shareBtn"),
+    osmLayerBtn: document.getElementById("osmLayerBtn"),
+    satLayerBtn: document.getElementById("satLayerBtn"),
+    pdokLayerBtn: document.getElementById("pdokLayerBtn"),
     pipeEditHint: document.getElementById("pipeEditHint"),
     pipeInspectionStatus: document.getElementById("pipeInspectionStatus"),
     pipeInspectionReason: document.getElementById("pipeInspectionReason"),
@@ -789,18 +820,38 @@
       const isDone = displayStatus(pipe) === "done";
       const isSelected = selected && selected.id === pipe.id;
 
+      let layer;
       if (isDone) {
-        const outline = L.polyline(pipe.coords, { color: "#22a06b", weight: isSelected ? 12 : 10, opacity: 0.95 }).addTo(map);
-        outline.on("click", () => selectPipe(pipe));
-        layers.push(outline);
-      }
+        const stripeWeight = isSelected ? 8 : 6;
+        const greenStripe = L.polyline(pipe.coords, {
+          color: "#22a06b",
+          weight: stripeWeight,
+          opacity: 0.98,
+          dashArray: "14 14",
+          dashOffset: "0",
+        }).addTo(map);
 
-      const layer = L.polyline(pipe.coords, {
-        color: lineColor(pipe),
-        weight: lineWeight(pipe),
-        opacity: 0.98,
-        dashArray: lineDashArray(pipe),
-      }).addTo(map);
+        const typeStripe = L.polyline(pipe.coords, {
+          color: lineColor(pipe),
+          weight: stripeWeight,
+          opacity: 0.98,
+          dashArray: "14 14",
+          dashOffset: "14",
+        }).addTo(map);
+
+        greenStripe.on("click", () => selectPipe(pipe));
+        typeStripe.on("click", () => selectPipe(pipe));
+        layers.push(greenStripe, typeStripe);
+        layer = typeStripe;
+      } else {
+        layer = L.polyline(pipe.coords, {
+          color: lineColor(pipe),
+          weight: lineWeight(pipe),
+          opacity: 0.98,
+          dashArray: lineDashArray(pipe),
+        }).addTo(map);
+        layers.push(layer);
+      }
       layer.on("click", () => selectPipe(pipe));
       layer.bindTooltip(
         `<b>${escapeHtml(pipe.from || "?")} → ${escapeHtml(pipe.to || "?")}</b><br>` +
@@ -809,7 +860,9 @@
         `${escapeHtml(pipe.street)}<br>${escapeHtml(statusLabel(displayStatus(pipe)))}`,
         { sticky: true }
       );
-      layers.push(layer);
+      if (!isDone) {
+        // Niet-gereinigde strengen hebben één kaartlaag; gereinigde strengen bestaan uit twee gestreepte lagen.
+      }
 
       const midpoint = midpointOfCoords(pipe.coords);
       if (midpoint) {
@@ -1072,6 +1125,9 @@
   if (els.statusFilter) els.statusFilter.addEventListener("change", () => draw(true));
   if (els.diameterFilter) els.diameterFilter.addEventListener("change", () => draw(true));
   if (els.materialFilter) els.materialFilter.addEventListener("change", () => draw(true));
+  if (els.osmLayerBtn) els.osmLayerBtn.addEventListener("click", () => setBaseLayer("osm"));
+  if (els.satLayerBtn) els.satLayerBtn.addEventListener("click", () => setBaseLayer("satellite"));
+  if (els.pdokLayerBtn) els.pdokLayerBtn.addEventListener("click", () => setBaseLayer("pdok"));
   els.fitBtn.addEventListener("click", () => {
     if (projectBounds && projectBounds.isValid()) map.fitBounds(projectBounds.pad(0.15));
   });

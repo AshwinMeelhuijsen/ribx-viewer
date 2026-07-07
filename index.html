@@ -13,7 +13,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="css/map-viewer.css?v=20260707b">
+    <link rel="stylesheet" href="css/map-viewer.css?v=20260707c">
   </head>
   <body>
     <div id="app">
@@ -264,6 +264,9 @@
 
       <main id="map" aria-label="Kaart">
         <div class="topbar">
+          <button id="osmLayerBtn" class="map-button map-layer-button active" type="button" title="OpenStreetMap">🗺️</button>
+          <button id="satLayerBtn" class="map-button map-layer-button" type="button" title="Satelliet">🛰️</button>
+          <button id="pdokLayerBtn" class="map-button map-layer-button" type="button" title="PDOK luchtfoto">🇳🇱</button>
           <button id="locateBtn" class="map-button" type="button" title="Toon mijn locatie">Mijn locatie</button>
           <button id="shareBtn" class="map-button" type="button" title="Kopieer link">Kopieer link</button>
         </div>
@@ -272,6 +275,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
-    <script src="js/map-viewer.js?v=20260707b"></script>
+    <script src="js/map-viewer.js?v=20260707c"></script>
   </body>
 </html>
