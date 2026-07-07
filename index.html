@@ -13,7 +13,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="css/map-viewer.css?v=20260707h">
+    <link rel="stylesheet" href="css/map-viewer.css?v=20260707j">
   </head>
   <body>
     <div id="app">
@@ -195,6 +195,17 @@
           </div>
         </section>
 
+        <section class="panel validation-panel">
+          <strong>RIBX validatie</strong>
+          <div id="validationSummary" class="validation-summary muted">Nog geen bestand geladen.</div>
+          <details id="validationDetails" class="validation-details">
+            <summary>Bekijk validatierapport</summary>
+            <div id="validationReport" class="validation-report muted">Nog geen rapport beschikbaar.</div>
+          </details>
+          <button id="downloadValidationBtn" class="button-secondary" type="button">Download validatierapport CSV</button>
+        </section>
+
+
         <section class="panel">
           <label for="searchBox">Zoeken</label>
           <input id="searchBox" type="search" placeholder="Straat, putnummer of strengcode">
@@ -275,6 +286,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
-    <script src="js/map-viewer.js?v=20260707h"></script>
+    <script src="js/map-viewer.js?v=20260707j"></script>
   </body>
 </html>

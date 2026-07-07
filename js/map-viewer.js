@@ -59,6 +59,7 @@
   let ribxXmlDoc = null;
   let manholes = [];
   let ribxDirty = false;
+  let validationReport = null;
   let ignoreNextMapClick = false;
   const statuses = new Map();
 
@@ -121,6 +122,9 @@
     putNotCleanedReason: document.getElementById("putNotCleanedReason"),
     applyPutRibxBtn: document.getElementById("applyPutRibxBtn"),
     downloadRibxBtn: document.getElementById("downloadRibxBtn"),
+    validationSummary: document.getElementById("validationSummary"),
+    validationDetails: document.getElementById("validationDetails"),
+    validationReport: document.getElementById("validationReport"),
   };
 
   function setMessage(text, type) {
@@ -394,6 +398,173 @@
     return statuses.get(pipe.id) || "todo";
   }
 
+  function makeIssue(level, category, message, details) {
+    return {
+      level,
+      category,
+      message,
+      id: details?.id || "",
+      from: details?.from || "",
+      to: details?.to || "",
+      street: details?.street || "",
+      type: details?.type || "",
+      length: details?.length ?? "",
+    };
+  }
+
+  function countRibxPipeObjects(xml) {
+    return Array.from(xml.getElementsByTagName("*")).filter((el) => localName(el.tagName) === "zb_a").length;
+  }
+
+  function inspectPipeElementForValidation(el, index, idCounts) {
+    const id = textOf(el, ["AAA"]) || `streng-${index + 1}`;
+    const from = textOf(el, ["AAD"]);
+    const to = textOf(el, ["AAF"]);
+    const street = textOf(el, ["AAJ"]) || "Onbekende straat";
+    const geometry = geometryFromElement(el);
+    const sewerType = sewerTypeOf(el);
+    const diameter = textOf(el, ["ACB", "ACC"]);
+    const material = textOf(el, ["ACD", "GCD"]);
+    const issues = [];
+
+    idCounts.set(id, (idCounts.get(id) || 0) + 1);
+
+    if (!textOf(el, ["AAA"])) issues.push(makeIssue("warn", "ID", "Streng heeft geen duidelijke AAA/GUID.", { id, from, to, street }));
+    if (!from) issues.push(makeIssue("warn", "Put", "Beginput ontbreekt.", { id, from, to, street }));
+    if (!to) issues.push(makeIssue("warn", "Put", "Eindput ontbreekt.", { id, from, to, street }));
+    if (!street || street === "Onbekende straat") issues.push(makeIssue("warn", "Straat", "Straatnaam ontbreekt of is onbekend.", { id, from, to, street }));
+    if (!diameter) issues.push(makeIssue("warn", "Diameter", "Diameter ontbreekt.", { id, from, to, street }));
+    if (!material) issues.push(makeIssue("warn", "Materiaal", "Materiaal ontbreekt.", { id, from, to, street }));
+    if (!sewerType || sewerType.key === "onbekend") {
+      issues.push(makeIssue("warn", "Stelseltype", "Riooltype/stelseltype is onbekend.", { id, from, to, street, type: sewerType?.raw || "" }));
+    }
+
+    if (!geometry.coords || geometry.coords.length < 2) {
+      issues.push(makeIssue("error", "Geometrie", "Geometrie ontbreekt of heeft minder dan 2 geldige punten.", { id, from, to, street, type: sewerType?.label || "", length: 0 }));
+    } else {
+      const invalidPoint = geometry.coords.some((point) => !Array.isArray(point) || point.length < 2 || !Number.isFinite(point[0]) || !Number.isFinite(point[1]));
+      if (invalidPoint) issues.push(makeIssue("error", "Geometrie", "Geometrie bevat ongeldige coördinaten.", { id, from, to, street, type: sewerType?.label || "" }));
+      if (!Number.isFinite(geometry.calculatedLength) || geometry.calculatedLength <= 0) {
+        issues.push(makeIssue("error", "Lengte", "Berekende lengte is 0 meter of ongeldig.", { id, from, to, street, type: sewerType?.label || "", length: geometry.calculatedLength }));
+      }
+    }
+
+    return issues;
+  }
+
+  function validateRibxDocument(xml, parsedPipes, parsedManholes) {
+    const sourcePipeElements = Array.from(xml.getElementsByTagName("*")).filter((el) => localName(el.tagName) === "zb_a");
+    const issues = [];
+    const idCounts = new Map();
+
+    sourcePipeElements.forEach((el, index) => {
+      issues.push(...inspectPipeElementForValidation(el, index, idCounts));
+    });
+
+    idCounts.forEach((count, id) => {
+      if (count > 1) issues.push(makeIssue("error", "Dubbele ID", `AAA/GUID komt ${count} keer voor.`, { id }));
+    });
+
+    const sourceCount = sourcePipeElements.length;
+    const drawnCount = parsedPipes.length;
+
+    if (sourceCount !== drawnCount) {
+      issues.push(makeIssue("error", "Inlezen", `${sourceCount} strengen in RIBX, maar ${drawnCount} strengen getekend.`, {}));
+    }
+
+    const manholeIds = new Set();
+    parsedPipes.forEach((pipe) => {
+      if (pipe.from) manholeIds.add(pipe.from);
+      if (pipe.to) manholeIds.add(pipe.to);
+      const length = Number(String(pipe.length || "").replace(",", "."));
+      if (!Number.isFinite(length) || length <= 0) issues.push(makeIssue("error", "Lengte", "Getekende streng heeft geen geldige lengte.", pipe));
+    });
+
+    const orphanManholes = parsedManholes.filter((put) => put.id && !manholeIds.has(put.id));
+    orphanManholes.forEach((put) => {
+      issues.push(makeIssue("warn", "Put", "Put komt voor in RIBX maar is niet gekoppeld aan een getekende streng.", { id: put.id }));
+    });
+
+    const errors = issues.filter((issue) => issue.level === "error");
+    const warnings = issues.filter((issue) => issue.level === "warn");
+    let score = 100;
+    if (sourceCount > 0) {
+      score -= Math.round((errors.length * 100) / Math.max(sourceCount, 1));
+      score -= Math.round((warnings.length * 25) / Math.max(sourceCount, 1));
+    }
+    score = Math.max(0, Math.min(100, score));
+
+    return {
+      sourceCount,
+      drawnCount,
+      connectedManholeCount: manholeIds.size,
+      orphanManholeCount: orphanManholes.length,
+      issueCount: issues.length,
+      errorCount: errors.length,
+      warningCount: warnings.length,
+      score,
+      issues,
+    };
+  }
+
+  function validationStatusClass(report) {
+    if (!report) return "muted";
+    if (report.errorCount > 0) return "error";
+    if (report.warningCount > 0) return "warn";
+    return "ok";
+  }
+
+  function renderValidationReport(report) {
+    if (!els.validationSummary || !els.validationReport) return;
+
+    if (!report) {
+      els.validationSummary.className = "validation-summary muted";
+      els.validationSummary.textContent = "Nog geen bestand geladen.";
+      els.validationReport.textContent = "Nog geen validatierapport beschikbaar.";
+      return;
+    }
+
+    const statusClass = validationStatusClass(report);
+    els.validationSummary.className = `validation-summary ${statusClass}`;
+
+    if (report.errorCount === 0 && report.warningCount === 0) {
+      els.validationSummary.innerHTML =
+        `✅ <b>Alle ${report.drawnCount} strengen zijn succesvol ingeladen.</b><br>` +
+        `✓ Strengen: ${report.drawnCount} / ${report.sourceCount}<br>` +
+        `✓ Putten gevonden: ${report.connectedManholeCount}<br>` +
+        `✓ Kwaliteitsscore: ${report.score}%`;
+      els.validationReport.innerHTML = `<span class="validation-pill ok">OK</span> Geen fouten of waarschuwingen gevonden.`;
+      if (els.validationDetails) els.validationDetails.open = false;
+      return;
+    }
+
+    const icon = report.errorCount > 0 ? "❌" : "⚠️";
+    const label = report.errorCount > 0 ? "RIBX onvolledig verwerkt" : "RIBX geladen met waarschuwingen";
+    els.validationSummary.innerHTML =
+      `${icon} <b>${label}</b><br>` +
+      `Strengen: ${report.drawnCount} / ${report.sourceCount}<br>` +
+      `Fouten: ${report.errorCount} · Waarschuwingen: ${report.warningCount}<br>` +
+      `Kwaliteitsscore: ${report.score}%`;
+
+    els.validationReport.innerHTML = report.issues.map((issue) => {
+      const pill = issue.level === "error" ? '<span class="validation-pill error">FOUT</span>' : '<span class="validation-pill warn">WAARSCHUWING</span>';
+      const pipeLabel = issue.from || issue.to ? `${escapeHtml(issue.from || "?")} → ${escapeHtml(issue.to || "?")}` : escapeHtml(issue.id || "Onbekend object");
+      return `
+        <div class="validation-item">
+          ${pill}
+          <b>${escapeHtml(issue.category)} — ${pipeLabel}</b>
+          ${issue.id ? `ID: ${escapeHtml(issue.id)}<br>` : ""}
+          ${issue.street ? `Straat: ${escapeHtml(issue.street)}<br>` : ""}
+          ${issue.type ? `Type: ${escapeHtml(issue.type)}<br>` : ""}
+          ${issue.length !== "" ? `Lengte: ${escapeHtml(formatLength(issue.length))}<br>` : ""}
+          Probleem: ${escapeHtml(issue.message)}
+        </div>`;
+    }).join("");
+
+    if (els.validationDetails) els.validationDetails.open = true;
+  }
+
+
 
 
   function parseCoordinatesFromText(text) {
@@ -507,12 +678,25 @@
   }
 
   function dedupePipes(items) {
-    const unique = new Map();
-    items.forEach((pipe) => {
-      if (!pipe || !pipe.coords || pipe.coords.length < 2) return;
-      unique.set(pipe.id + JSON.stringify(pipe.coords), pipe);
+    // Elke ZB_A/streng blijft behouden. Niet dedupliceren op geometrie of begin-/eindput:
+    // parallelle HWA/DWA-strengen kunnen dezelfde ligging hebben.
+    const seenIds = new Map();
+
+    return items.filter((pipe, index) => {
+      if (!pipe || !pipe.coords || pipe.coords.length < 2) return false;
+
+      const baseId = String(pipe.id || `streng-${index + 1}`);
+      if (!seenIds.has(baseId)) {
+        seenIds.set(baseId, 1);
+        pipe.id = baseId;
+        return true;
+      }
+
+      const count = seenIds.get(baseId) + 1;
+      seenIds.set(baseId, count);
+      pipe.id = `${baseId}#${count}`;
+      return true;
     });
-    return Array.from(unique.values());
   }
 
   function parseRibx(xml) {
@@ -1120,11 +1304,12 @@
   function resetViewer() {
     pipes = [];
     selected = null;
-    selectedManhole = null;
     statuses.clear();
     ribxXmlDoc = null;
     manholes = [];
     ribxDirty = false;
+    validationReport = null;
+    renderValidationReport(null);
     currentProjectName = "";
     currentFileName = "";
     updateStats();
@@ -1157,17 +1342,21 @@
     currentFileName = file.name;
     currentProjectName = file.name.replace(/\.[^.]+$/, "");
     selected = null;
-    selectedManhole = null;
     statuses.clear();
     const restored = autoLoadProgress();
+    validationReport = validateRibxDocument(xml, pipes, manholes);
+    renderValidationReport(validationReport);
     updateStats();
     draw(true);
     if (pipes.length) {
       const done = Array.from(statuses.values()).filter((value) => value === "done").length;
       const problem = Array.from(statuses.values()).filter((value) => value === "problem").length;
+      const validText = validationReport.errorCount === 0 && validationReport.warningCount === 0
+        ? ` ✅ Alle ${pipes.length} strengen zijn succesvol ingeladen.`
+        : ` ⚠️ Validatie: ${validationReport.errorCount} fout(en), ${validationReport.warningCount} waarschuwing(en).`;
       setMessage(
-        `${pipes.length} strengen geladen uit ${file.name}.${restored ? " Opgeslagen voortgang automatisch hersteld." : ""} Gereinigd: ${done}. Aandachtspunt: ${problem}.`,
-        "ok"
+        `${pipes.length} strengen geladen uit ${file.name}.${restored ? " Opgeslagen voortgang automatisch hersteld." : ""} Gereinigd: ${done}. Aandachtspunt: ${problem}.${validText}`,
+        validationReport.errorCount ? "error" : "ok"
       );
     } else {
       setMessage("Geen strengen met coordinaten gevonden. Mogelijk gebruikt dit RIBX-bestand andere veldnamen.", "error");
@@ -1232,7 +1421,7 @@
   map.on("zoomend", () => draw(false));
   map.on("moveend", () => draw(false));
   map.on("click", () => {
-    if (ignoreNextMapClick) return;
+    if (typeof ignoreNextMapClick !== "undefined" && ignoreNextMapClick) return;
     clearSelection();
   });
 
