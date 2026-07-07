@@ -876,8 +876,14 @@
           opacity: 1,
         }).addTo(map);
 
-        greenBase.on("click", () => selectPipe(pipe));
-        typeCore.on("click", () => selectPipe(pipe));
+        greenBase.on("click", (event) => {
+          L.DomEvent.stopPropagation(event);
+          selectPipe(pipe);
+        });
+        typeCore.on("click", (event) => {
+          L.DomEvent.stopPropagation(event);
+          selectPipe(pipe);
+        });
         layers.push(greenBase, typeCore);
         layer = typeCore;
       } else {
@@ -922,7 +928,10 @@
       const isSelected = selectedManhole && selectedManhole.id === id;
       const marker = L.marker(coord, { icon: manholeIcon(isSelected), zIndexOffset: 900 }).addTo(map);
       marker.bindTooltip(`<b>Put ${escapeHtml(id)}</b><br>${connected.length} aangesloten streng(en)`, { sticky: true });
-      marker.on("click", () => selectManhole(id, coord, connected));
+      marker.on("click", (event) => {
+        L.DomEvent.stopPropagation(event);
+        selectManhole(id, coord, connected);
+      });
       manholeLayers.push(marker);
 
       const label = L.marker(coord, { icon: manholeLabelIcon(id), interactive: false, keyboard: false, zIndexOffset: 880 }).addTo(map);
@@ -930,6 +939,39 @@
     });
 
     if (shouldFit && projectBounds.isValid()) map.fitBounds(projectBounds.pad(0.15));
+  }
+
+  function clearSelection() {
+    selected = null;
+    selectedManhole = null;
+
+    if (els.pipeEditHint) {
+      els.pipeEditHint.textContent = "Klik eerst op een leiding op de kaart.";
+    }
+
+    if (els.details) {
+      els.details.className = "details muted";
+      els.details.textContent = "Klik op een streng of put voor details.";
+    }
+
+    [
+      els.pipeInspectionStatus,
+      els.pipeInspectionReason,
+      els.pipeCleaningStatus,
+      els.pipeCleaningReason,
+      els.pipeCleaningMethod,
+      els.pipeCleaningDate,
+      els.pipeNotCleanedReason,
+      els.putInspectionStatus,
+      els.putInspectionReason,
+      els.putCleaningStatus,
+      els.putCleaningReason,
+      els.putNotCleanedReason,
+    ].filter(Boolean).forEach((field) => {
+      field.value = "";
+    });
+
+    draw(false);
   }
 
   function selectManhole(id, coord, connected) {
@@ -1172,6 +1214,11 @@
   if (els.pdokLayerBtn) els.pdokLayerBtn.addEventListener("click", () => setBaseLayer("pdok"));
   map.on("zoomend", () => draw(false));
   map.on("moveend", () => draw(false));
+  map.on("click", () => clearSelection());
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearSelection();
+  });
   els.fitBtn.addEventListener("click", () => {
     if (projectBounds && projectBounds.isValid()) map.fitBounds(projectBounds.pad(0.15));
   });
