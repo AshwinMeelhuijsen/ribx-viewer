@@ -60,6 +60,8 @@
   let manholes = [];
   let ribxDirty = false;
   let validationReport = null;
+  let renderedPipeIds = new Set();
+  let drawDiagnostics = null;
   let ignoreNextMapClick = false;
   const statuses = new Map();
 
@@ -398,6 +400,84 @@
     return statuses.get(pipe.id) || "todo";
   }
 
+  function pipeGeometryKey(pipe) {
+    if (pipe.rdPairs && pipe.rdPairs.length >= 2) {
+      return pipe.rdPairs.map(([x, y]) => `${Math.round(Number(x) * 100) / 100},${Math.round(Number(y) * 100) / 100}`).join("|");
+    }
+    return (pipe.coords || []).map(([lat, lng]) => `${Math.round(Number(lat) * 1000000) / 1000000},${Math.round(Number(lng) * 1000000) / 1000000}`).join("|");
+  }
+
+  function buildParallelGroups(pipeList) {
+    const groups = new Map();
+    pipeList.forEach((pipe) => {
+      const key = pipeGeometryKey(pipe);
+      if (!key) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(pipe.id);
+    });
+    return groups;
+  }
+
+  function offsetCoordsForPipe(pipe, pipeList) {
+    // Hiermee worden exact overlappende HWA/DWA-strengen beide zichtbaar.
+    // We verschuiven alleen de kaartweergave, niet de originele RIBX-data.
+    const key = pipeGeometryKey(pipe);
+    const groups = buildParallelGroups(pipeList);
+    const group = groups.get(key) || [];
+    if (group.length <= 1) return pipe.coords;
+
+    const index = group.indexOf(pipe.id);
+    if (index < 0) return pipe.coords;
+
+    const offsetPixels = (index - (group.length - 1) / 2) * 7;
+    if (Math.abs(offsetPixels) < 0.1) return pipe.coords;
+
+    const zoom = map.getZoom();
+    const points = pipe.coords.map((coord) => map.project(coord, zoom));
+
+    return points.map((point, idx) => {
+      const prev = points[Math.max(0, idx - 1)];
+      const next = points[Math.min(points.length - 1, idx + 1)];
+      const dx = next.x - prev.x;
+      const dy = next.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const shifted = L.point(point.x + nx * offsetPixels, point.y + ny * offsetPixels);
+      return map.unproject(shifted, zoom);
+    });
+  }
+
+  function registerRenderedPipe(pipe) {
+    if (pipe && pipe.id) renderedPipeIds.add(pipe.id);
+  }
+
+  function updateDrawDiagnostics(shownPipes) {
+    const shownIds = new Set(shownPipes.map((pipe) => pipe.id));
+    const missingRendered = shownPipes.filter((pipe) => !renderedPipeIds.has(pipe.id));
+    const parallelGroups = Array.from(buildParallelGroups(pipes).entries())
+      .filter(([, ids]) => ids.length > 1)
+      .map(([key, ids]) => ({ key, ids }));
+
+    drawDiagnostics = {
+      parsed: pipes.length,
+      filtered: shownPipes.length,
+      rendered: renderedPipeIds.size,
+      missingRendered,
+      parallelGroups,
+    };
+
+    if (validationReport) {
+      validationReport.renderedCount = renderedPipeIds.size;
+      validationReport.filteredCount = shownPipes.length;
+      validationReport.parallelGroupCount = parallelGroups.length;
+      validationReport.missingRendered = missingRendered;
+      renderValidationReport(validationReport);
+    }
+  }
+
+
+
   function makeIssue(level, category, message, details) {
     return {
       level,
@@ -532,7 +612,9 @@
         `✅ <b>Alle ${report.drawnCount} strengen zijn succesvol ingeladen.</b><br>` +
         `✓ Strengen: ${report.drawnCount} / ${report.sourceCount}<br>` +
         `✓ Putten gevonden: ${report.connectedManholeCount}<br>` +
-        `✓ Kwaliteitsscore: ${report.score}%`;
+        `✓ Kwaliteitsscore: ${report.score}%` +
+        (report.renderedCount !== undefined ? `<br>✓ Kaartlagen: ${report.renderedCount} / ${report.filteredCount || report.drawnCount}` : "") +
+        (report.parallelGroupCount ? `<br><span class="validation-small">Parallelle/gelijke geometrieën zichtbaar gemaakt: ${report.parallelGroupCount}</span>` : "");
       els.validationReport.innerHTML = `<span class="validation-pill ok">OK</span> Geen fouten of waarschuwingen gevonden.`;
       if (els.validationDetails) els.validationDetails.open = false;
       return;
@@ -544,7 +626,9 @@
       `${icon} <b>${label}</b><br>` +
       `Strengen: ${report.drawnCount} / ${report.sourceCount}<br>` +
       `Fouten: ${report.errorCount} · Waarschuwingen: ${report.warningCount}<br>` +
-      `Kwaliteitsscore: ${report.score}%`;
+      `Kwaliteitsscore: ${report.score}%` +
+      (report.renderedCount !== undefined ? `<br>Kaartlagen: ${report.renderedCount} / ${report.filteredCount || report.drawnCount}` : "") +
+      (report.parallelGroupCount ? `<br><span class="validation-small">Parallelle/gelijke geometrieën zichtbaar gemaakt: ${report.parallelGroupCount}</span>` : "");
 
     els.validationReport.innerHTML = report.issues.map((issue) => {
       const pill = issue.level === "error" ? '<span class="validation-pill error">FOUT</span>' : '<span class="validation-pill warn">WAARSCHUWING</span>';
@@ -679,7 +763,7 @@
 
   function dedupePipes(items) {
     // Elke ZB_A/streng blijft behouden. Niet dedupliceren op geometrie of begin-/eindput:
-    // parallelle HWA/DWA-strengen kunnen dezelfde ligging hebben.
+    // parallelle HWA/DWA-strengen kunnen exact dezelfde ligging hebben.
     const seenIds = new Map();
 
     return items.filter((pipe, index) => {
@@ -1029,6 +1113,7 @@
     layers = [];
     manholeLayers = [];
     arrowLayers = [];
+    renderedPipeIds = new Set();
 
     const query = els.searchBox.value.toLowerCase().trim();
     const streetFilter = els.streetFilter.value;
@@ -1057,16 +1142,17 @@
     shown.forEach((pipe) => {
       const isDone = displayStatus(pipe) === "done";
       const isSelected = selected && selected.id === pipe.id;
+      const displayCoords = offsetCoordsForPipe(pipe, shown);
 
       let layer;
       if (isDone) {
-        const greenBase = L.polyline(pipe.coords, {
+        const greenBase = L.polyline(displayCoords, {
           color: "#22a06b",
           weight: isSelected ? 12 : 10,
           opacity: 0.98,
         }).addTo(map);
 
-        const typeCore = L.polyline(pipe.coords, {
+        const typeCore = L.polyline(displayCoords, {
           color: lineColor(pipe),
           weight: isSelected ? 4 : 3,
           opacity: 1,
@@ -1083,7 +1169,7 @@
         layers.push(greenBase, typeCore);
         layer = typeCore;
       } else {
-        layer = L.polyline(pipe.coords, {
+        layer = L.polyline(displayCoords, {
           color: lineColor(pipe),
           weight: lineWeight(pipe),
           opacity: 0.98,
@@ -1095,6 +1181,7 @@
         markFeatureClick(event);
         selectPipe(pipe);
       });
+      registerRenderedPipe(pipe);
       layer.bindTooltip(
         `<b>${escapeHtml(pipe.from || "?")} → ${escapeHtml(pipe.to || "?")}</b><br>` +
         `${escapeHtml(pipe.sewerType?.label || "Onbekend")} · ${escapeHtml(formatLength(pipe.length))}<br>` +
@@ -1107,7 +1194,7 @@
       }
 
       arrowFractionsForLength(pipe.length).forEach((fraction) => {
-        const placement = pointAtFraction(pipe.coords, fraction);
+        const placement = pointAtFraction(displayCoords, fraction);
         if (!placement) return;
         const arrow = L.marker(placement.point, {
           icon: directionArrowIcon(placement.angle, lineColor(pipe)),
@@ -1137,6 +1224,7 @@
       manholeLayers.push(label);
     });
 
+    updateDrawDiagnostics(shown);
     if (shouldFit && projectBounds.isValid()) map.fitBounds(projectBounds.pad(0.15));
   }
 

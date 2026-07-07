@@ -528,3 +528,13 @@ button:hover {
 .validation-pill.error { background:#d93025; }
 .validation-pill.warn { background:#f59e0b; }
 .validation-pill.ok { background:#22a06b; }
+
+
+/* AM RibX Viewer stability update: kaartdiagnose en parallelle strengen */
+.diagnostic-line {
+  margin-top: 6px;
+}
+.validation-small {
+  color: var(--muted);
+  font-size: .78rem;
+}
