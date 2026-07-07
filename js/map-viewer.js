@@ -341,10 +341,10 @@
   }
 
   function segmentAngle(a, b) {
-    // Leaflet schermhoeken: oost = 0 graden. Het pijlsymbool ➤ wijst standaard naar rechts.
-    const dx = b[1] - a[1];
-    const dy = b[0] - a[0];
-    return Math.atan2(dy, dx) * 180 / Math.PI;
+    // Bereken de hoek in schermcoördinaten. Daardoor loopt de SVG-pijl exact met de lijn mee.
+    const p1 = map.latLngToLayerPoint(a);
+    const p2 = map.latLngToLayerPoint(b);
+    return Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
   }
 
   function arrowFractionsForLength(length) {
@@ -363,8 +363,19 @@
     return L.divIcon({ className: "", html: `<div class="manhole-label">${escapeHtml(id)}</div>`, iconSize: [86, 16], iconAnchor: [43, -7] });
   }
 
-  function directionArrowIcon(angle) {
-    return L.divIcon({ className: "", html: `<div class="direction-arrow" style="transform: rotate(${angle}deg);">➤</div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
+  function directionArrowIcon(angle, color) {
+    const safeColor = color || "#111827";
+    return L.divIcon({
+      className: "",
+      html: `
+        <div class="direction-arrow" style="transform: rotate(${angle}deg);">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path style="fill:${safeColor}" d="M3 10.2 L15.4 10.2 L10.3 5.1 L12.8 2.6 L22 12 L12.8 21.4 L10.3 18.9 L15.4 13.8 L3 13.8 Z"></path>
+          </svg>
+        </div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
   }
 
   function displayStatus(pipe) {
@@ -853,27 +864,22 @@
 
       let layer;
       if (isDone) {
-        const stripeWeight = isSelected ? 8 : 6;
-        const greenStripe = L.polyline(pipe.coords, {
+        const greenBase = L.polyline(pipe.coords, {
           color: "#22a06b",
-          weight: stripeWeight,
+          weight: isSelected ? 12 : 10,
           opacity: 0.98,
-          dashArray: "8 8",
-          dashOffset: "0",
         }).addTo(map);
 
-        const typeStripe = L.polyline(pipe.coords, {
+        const typeCore = L.polyline(pipe.coords, {
           color: lineColor(pipe),
-          weight: stripeWeight,
-          opacity: 0.98,
-          dashArray: "8 8",
-          dashOffset: "8",
+          weight: isSelected ? 4 : 3,
+          opacity: 1,
         }).addTo(map);
 
-        greenStripe.on("click", () => selectPipe(pipe));
-        typeStripe.on("click", () => selectPipe(pipe));
-        layers.push(greenStripe, typeStripe);
-        layer = typeStripe;
+        greenBase.on("click", () => selectPipe(pipe));
+        typeCore.on("click", () => selectPipe(pipe));
+        layers.push(greenBase, typeCore);
+        layer = typeCore;
       } else {
         layer = L.polyline(pipe.coords, {
           color: lineColor(pipe),
@@ -899,7 +905,7 @@
         const placement = pointAtFraction(pipe.coords, fraction);
         if (!placement) return;
         const arrow = L.marker(placement.point, {
-          icon: directionArrowIcon(placement.angle),
+          icon: directionArrowIcon(placement.angle, lineColor(pipe)),
           interactive: false,
           keyboard: false,
         }).addTo(map);
@@ -1164,6 +1170,8 @@
   if (els.osmLayerBtn) els.osmLayerBtn.addEventListener("click", () => setBaseLayer("osm"));
   if (els.satLayerBtn) els.satLayerBtn.addEventListener("click", () => setBaseLayer("satellite"));
   if (els.pdokLayerBtn) els.pdokLayerBtn.addEventListener("click", () => setBaseLayer("pdok"));
+  map.on("zoomend", () => draw(false));
+  map.on("moveend", () => draw(false));
   els.fitBtn.addEventListener("click", () => {
     if (projectBounds && projectBounds.isValid()) map.fitBounds(projectBounds.pad(0.15));
   });
