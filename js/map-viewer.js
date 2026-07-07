@@ -895,7 +895,10 @@
         }).addTo(map);
         layers.push(layer);
       }
-      layer.on("click", () => selectPipe(pipe));
+      layer.on("click", (event) => {
+        L.DomEvent.stopPropagation(event);
+        selectPipe(pipe);
+      });
       layer.bindTooltip(
         `<b>${escapeHtml(pipe.from || "?")} → ${escapeHtml(pipe.to || "?")}</b><br>` +
         `${escapeHtml(pipe.sewerType?.label || "Onbekend")} · ${escapeHtml(formatLength(pipe.length))}<br>` +
@@ -1105,6 +1108,7 @@
   function resetViewer() {
     pipes = [];
     selected = null;
+    selectedManhole = null;
     statuses.clear();
     ribxXmlDoc = null;
     manholes = [];
@@ -1141,6 +1145,7 @@
     currentFileName = file.name;
     currentProjectName = file.name.replace(/\.[^.]+$/, "");
     selected = null;
+    selectedManhole = null;
     statuses.clear();
     const restored = autoLoadProgress();
     updateStats();
@@ -1214,7 +1219,10 @@
   if (els.pdokLayerBtn) els.pdokLayerBtn.addEventListener("click", () => setBaseLayer("pdok"));
   map.on("zoomend", () => draw(false));
   map.on("moveend", () => draw(false));
-  map.on("click", () => clearSelection());
+  map.on("click", (event) => {
+    if (event.originalEvent && event.originalEvent.defaultPrevented) return;
+    clearSelection();
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") clearSelection();
@@ -1256,6 +1264,7 @@
     statuses.clear();
     autoSaveProgress();
     selected = null;
+    selectedManhole = null;
     els.details.className = "details muted";
     els.details.textContent = "Klik op een streng op de kaart.";
     draw(false);
