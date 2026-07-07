@@ -370,3 +370,17 @@ button:hover {
   color: #111827;
   -webkit-text-stroke: 1px #ffffff;
 }
+
+/* AM RibX Viewer 2.3: verbeterde pijlen en labels */
+.direction-arrow {
+  font-size: 14px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.manhole-label {
+  transform: translate(10px, -3px);
+}

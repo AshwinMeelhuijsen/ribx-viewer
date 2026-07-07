@@ -303,25 +303,56 @@
     return "Nog te reinigen";
   }
 
-  function midpointOfCoords(coords) {
+  function pointAtFraction(coords, fraction) {
     if (!coords || coords.length < 2) return null;
-    const index = Math.floor((coords.length - 1) / 2);
-    const a = coords[index];
-    const b = coords[index + 1] || coords[index];
-    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+    const segments = [];
+    let total = 0;
+
+    for (let index = 1; index < coords.length; index += 1) {
+      const a = coords[index - 1];
+      const b = coords[index];
+      const dx = b[1] - a[1];
+      const dy = b[0] - a[0];
+      const length = Math.hypot(dx, dy);
+      if (length <= 0) continue;
+      segments.push({ a, b, length });
+      total += length;
+    }
+
+    if (!segments.length || total <= 0) return null;
+
+    let target = total * Math.max(0.05, Math.min(0.95, fraction));
+    for (const segment of segments) {
+      if (target <= segment.length) {
+        const ratio = target / segment.length;
+        const lat = segment.a[0] + (segment.b[0] - segment.a[0]) * ratio;
+        const lng = segment.a[1] + (segment.b[1] - segment.a[1]) * ratio;
+        return {
+          point: [lat, lng],
+          angle: segmentAngle(segment.a, segment.b),
+        };
+      }
+      target -= segment.length;
+    }
+
+    const last = segments[segments.length - 1];
+    return { point: last.b, angle: segmentAngle(last.a, last.b) };
   }
 
-  function angleOfCoords(coords) {
-    if (!coords || coords.length < 2) return 0;
-    const index = Math.floor((coords.length - 1) / 2);
-    const a = coords[index];
-    const b = coords[index + 1] || coords[index];
-    const lat1 = a[0] * Math.PI / 180;
-    const lat2 = b[0] * Math.PI / 180;
-    const dLon = (b[1] - a[1]) * Math.PI / 180;
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  function segmentAngle(a, b) {
+    // Leaflet schermhoeken: oost = 0 graden. Het pijlsymbool ➤ wijst standaard naar rechts.
+    const dx = b[1] - a[1];
+    const dy = b[0] - a[0];
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+
+  function arrowFractionsForLength(length) {
+    const num = Number(String(length || "").replace(",", "."));
+    if (!Number.isFinite(num)) return [0.5];
+    if (num <= 40) return [0.5];
+    if (num <= 80) return [0.33, 0.67];
+    return [0.25, 0.5, 0.75];
   }
 
   function manholeIcon(isSelected) {
@@ -827,7 +858,7 @@
           color: "#22a06b",
           weight: stripeWeight,
           opacity: 0.98,
-          dashArray: "14 14",
+          dashArray: "8 8",
           dashOffset: "0",
         }).addTo(map);
 
@@ -835,8 +866,8 @@
           color: lineColor(pipe),
           weight: stripeWeight,
           opacity: 0.98,
-          dashArray: "14 14",
-          dashOffset: "14",
+          dashArray: "8 8",
+          dashOffset: "8",
         }).addTo(map);
 
         greenStripe.on("click", () => selectPipe(pipe));
@@ -864,11 +895,16 @@
         // Niet-gereinigde strengen hebben één kaartlaag; gereinigde strengen bestaan uit twee gestreepte lagen.
       }
 
-      const midpoint = midpointOfCoords(pipe.coords);
-      if (midpoint) {
-        const arrow = L.marker(midpoint, { icon: directionArrowIcon(angleOfCoords(pipe.coords)), interactive: false, keyboard: false }).addTo(map);
+      arrowFractionsForLength(pipe.length).forEach((fraction) => {
+        const placement = pointAtFraction(pipe.coords, fraction);
+        if (!placement) return;
+        const arrow = L.marker(placement.point, {
+          icon: directionArrowIcon(placement.angle),
+          interactive: false,
+          keyboard: false,
+        }).addTo(map);
         arrowLayers.push(arrow);
-      }
+      });
 
       if (pipe.from && pipe.coords[0]) visibleManholes.set(pipe.from, pipe.coords[0]);
       if (pipe.to && pipe.coords[pipe.coords.length - 1]) visibleManholes.set(pipe.to, pipe.coords[pipe.coords.length - 1]);
