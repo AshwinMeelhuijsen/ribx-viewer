@@ -59,7 +59,19 @@
   let ribxXmlDoc = null;
   let manholes = [];
   let ribxDirty = false;
+  let ignoreNextMapClick = false;
   const statuses = new Map();
+
+  function markFeatureClick(event) {
+    ignoreNextMapClick = true;
+    if (event && event.originalEvent) {
+      L.DomEvent.stopPropagation(event.originalEvent);
+      L.DomEvent.preventDefault(event.originalEvent);
+    }
+    setTimeout(() => {
+      ignoreNextMapClick = false;
+    }, 0);
+  }
 
   const els = {
     fileInput: document.getElementById("fileInput"),
@@ -877,11 +889,11 @@
         }).addTo(map);
 
         greenBase.on("click", (event) => {
-          L.DomEvent.stopPropagation(event);
+          markFeatureClick(event);
           selectPipe(pipe);
         });
         typeCore.on("click", (event) => {
-          L.DomEvent.stopPropagation(event);
+          markFeatureClick(event);
           selectPipe(pipe);
         });
         layers.push(greenBase, typeCore);
@@ -896,7 +908,7 @@
         layers.push(layer);
       }
       layer.on("click", (event) => {
-        L.DomEvent.stopPropagation(event);
+        markFeatureClick(event);
         selectPipe(pipe);
       });
       layer.bindTooltip(
@@ -932,7 +944,7 @@
       const marker = L.marker(coord, { icon: manholeIcon(isSelected), zIndexOffset: 900 }).addTo(map);
       marker.bindTooltip(`<b>Put ${escapeHtml(id)}</b><br>${connected.length} aangesloten streng(en)`, { sticky: true });
       marker.on("click", (event) => {
-        L.DomEvent.stopPropagation(event);
+        markFeatureClick(event);
         selectManhole(id, coord, connected);
       });
       manholeLayers.push(marker);
@@ -1219,8 +1231,8 @@
   if (els.pdokLayerBtn) els.pdokLayerBtn.addEventListener("click", () => setBaseLayer("pdok"));
   map.on("zoomend", () => draw(false));
   map.on("moveend", () => draw(false));
-  map.on("click", (event) => {
-    if (event.originalEvent && event.originalEvent.defaultPrevented) return;
+  map.on("click", () => {
+    if (ignoreNextMapClick) return;
     clearSelection();
   });
 
@@ -1264,7 +1276,6 @@
     statuses.clear();
     autoSaveProgress();
     selected = null;
-    selectedManhole = null;
     els.details.className = "details muted";
     els.details.textContent = "Klik op een streng op de kaart.";
     draw(false);
