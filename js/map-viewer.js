@@ -373,6 +373,47 @@
     return [0.25, 0.5, 0.75];
   }
 
+  function bobHeight(value) {
+    const text = String(value ?? "").trim().replace(",", ".");
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null;
+    const height = Number(text);
+    return Number.isFinite(height) ? height : null;
+  }
+
+  function flowFromBob(el, geometry) {
+    const start = bobHeight(directTextOf(el, ["AXG"]));
+    const end = bobHeight(directTextOf(el, ["AXH"]));
+    const result = { start, end, direction: 0, reverse: false, reason: "BOB-hoogte ontbreekt of is ongeldig" };
+    if (start === null || end === null) return result;
+    if (Math.abs(start - end) < 1e-9) return { ...result, reason: "Gelijke BOB-hoogtes" };
+
+    const a = firstDescendantByLocalName(el, ["AAE"]);
+    const b = firstDescendantByLocalName(el, ["AAG"]);
+    const from = a && parseRdPairs(a.textContent)[0];
+    const to = b && parseRdPairs(b.textContent)[0];
+    const points = geometry.rdPairs || [];
+    if (!from || !to || points.length < 2) return { ...result, reason: "Ligging begin- en eindput niet vastgesteld" };
+    const distance = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+    // AXY can run opposite to AAD/AAF; compare both endpoint assignments.
+    const forward = distance(points[0], from) + distance(points[points.length - 1], to);
+    const backward = distance(points[0], to) + distance(points[points.length - 1], from);
+    if (Math.abs(forward - backward) < 1e-6) return { ...result, reason: "Lijnrichting niet eenduidig" };
+    const direction = start > end ? 1 : -1;
+    return { start, end, direction, reverse: (direction < 0) !== (backward < forward), reason: "" };
+  }
+
+  function flowLabel(pipe) {
+    const flow = pipe.flow;
+    if (!flow || !flow.direction) return `Onbekend (${flow?.reason || "geen BOB-gegevens"})`;
+    const from = flow.direction > 0 ? pipe.from : pipe.to;
+    const to = flow.direction > 0 ? pipe.to : pipe.from;
+    return `${from || "?"} → ${to || "?"} (op basis van BOB)`;
+  }
+
+  function formatBob(height) {
+    return height === null || height === undefined ? "Onbekend" : `${height.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} m NAP`;
+  }
+
   function manholeIcon(isSelected) {
     return L.divIcon({ className: "", html: `<div class="manhole-marker${isSelected ? " selected" : ""}"></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
   }
@@ -732,6 +773,7 @@
         sewerType: sewerTypeOf(el),
         coords: geometry.coords,
         rdPairs: geometry.rdPairs,
+        flow: flowFromBob(el, geometry),
         inspectionNode: el,
       };
     }).filter(Boolean);
@@ -1183,7 +1225,8 @@
       });
       registerRenderedPipe(pipe);
       layer.bindTooltip(
-        `<b>${escapeHtml(pipe.from || "?")} → ${escapeHtml(pipe.to || "?")}</b><br>` +
+        `<b>${escapeHtml(pipe.from || "?")} / ${escapeHtml(pipe.to || "?")}</b><br>` +
+        `Afstroming: ${escapeHtml(flowLabel(pipe))}<br>` +
         `${escapeHtml(pipe.sewerType?.label || "Onbekend")} · ${escapeHtml(formatLength(pipe.length))}<br>` +
         `Ø${escapeHtml(pipe.diameter || "?")} · ${escapeHtml(pipe.material || "?")}<br>` +
         `${escapeHtml(pipe.street)}<br>${escapeHtml(statusLabel(displayStatus(pipe)))}`,
@@ -1193,11 +1236,11 @@
         // Niet-gereinigde strengen hebben één kaartlaag; gereinigde strengen bestaan uit twee gestreepte lagen.
       }
 
-      arrowFractionsForLength(pipe.length).forEach((fraction) => {
+      (pipe.flow?.direction ? arrowFractionsForLength(pipe.length) : []).forEach((fraction) => {
         const placement = pointAtFraction(displayCoords, fraction);
         if (!placement) return;
         const arrow = L.marker(placement.point, {
-          icon: directionArrowIcon(placement.angle, lineColor(pipe)),
+          icon: directionArrowIcon(placement.angle + (pipe.flow.reverse ? 180 : 0), lineColor(pipe)),
           interactive: false,
           keyboard: false,
         }).addTo(map);
@@ -1297,6 +1340,9 @@
       <b>Type:</b> <span class="type-badge type-${escapeHtml(typeKey)}">${escapeHtml(typeLabel)}</span>${escapeHtml(rawType)}<br>
       <b>Straat:</b> ${escapeHtml(pipe.street)}<br>
       <b>Van / naar:</b> ${escapeHtml(pipe.from || "?")} / ${escapeHtml(pipe.to || "?")}<br>
+      <b>BOB beginput:</b> ${escapeHtml(formatBob(pipe.flow?.start))}<br>
+      <b>BOB eindput:</b> ${escapeHtml(formatBob(pipe.flow?.end))}<br>
+      <b>Afstroming:</b> ${escapeHtml(flowLabel(pipe))}<br>
       <b>Lengte:</b> <span class="length-highlight">${escapeHtml(formatLength(pipe.length))}</span><br>
       <b>Diameter:</b> Ø${escapeHtml(pipe.diameter || "?")} mm<br>
       <b>Materiaal:</b> ${escapeHtml(pipe.material || "?")}<br>
